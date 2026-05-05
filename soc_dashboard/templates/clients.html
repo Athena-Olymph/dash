@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Sentrium SOC — Client Overview</title>
+<meta name="description" content="Sentrium Integrated Security Operations Center — Client Overview">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/static/css/dashboard.css?v=7">
+<style>
+/* ── Client List ── */
+.list-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:14px; }
+.list-header h2 { font-size:0.95rem; font-weight:800; color:var(--text-primary); }
+.list-header .client-count { font-size:0.78rem; font-weight:600; color:var(--text-muted); }
+
+.filter-bar { display:flex; gap:8px; margin-bottom:14px; align-items:center; flex-wrap:wrap; }
+.filter-pill {
+    padding:5px 14px; border-radius:20px; font-size:0.75rem; font-weight:600;
+    border:1px solid var(--border-card); background:var(--bg-card); color:var(--text-muted);
+    cursor:pointer; transition:var(--transition); font-family:var(--font);
+}
+.filter-pill:hover,.filter-pill.active { background:var(--accent-blue); color:#fff; border-color:var(--accent-blue); }
+.filter-pill-av.active { background:#F97316; border-color:#F97316; }
+.filter-pill-s1.active { background:#6366F1; border-color:#6366F1; }
+
+.client-list-card {
+    background:var(--bg-card); border:1px solid var(--border-card);
+    border-radius:var(--radius-lg); overflow:hidden; box-shadow:var(--shadow-sm);
+    backdrop-filter:blur(8px);
+}
+.client-list-table { width:100%; border-collapse:collapse; }
+.client-list-table thead tr { border-bottom:1px solid var(--border-light); background:rgba(255,255,255,0.03); }
+.client-list-table th {
+    padding:10px 18px; text-align:left; font-size:0.68rem; font-weight:700;
+    color:var(--text-muted); text-transform:uppercase; letter-spacing:.07em; white-space:nowrap;
+}
+.client-list-table td { padding:13px 18px; border-bottom:1px solid var(--border-light); vertical-align:middle; }
+.client-list-table tbody tr:last-child td { border-bottom:none; }
+.client-list-table tbody tr { cursor:pointer; transition:background .15s; }
+.client-list-table tbody tr:hover { background:var(--bg-hover); }
+
+.cl-name { font-size:0.88rem; font-weight:700; color:var(--text-primary); }
+.cl-index { font-size:0.72rem; color:var(--text-muted); font-weight:500; min-width:20px; }
+
+.plat-pills { display:flex; gap:5px; }
+.plat-pill { display:inline-flex; align-items:center; gap:4px; padding:2px 9px; border-radius:5px; font-size:0.7rem; font-weight:700; }
+.plat-pill-s1 { background:rgba(99,102,241,0.15); color:#818CF8; border:1px solid rgba(99,102,241,0.25); }
+.plat-pill-av { background:rgba(249,115,22,0.15); color:#F97316; border:1px solid rgba(249,115,22,0.25); }
+.plat-dot { width:5px; height:5px; border-radius:50%; background:currentColor; }
+
+.cl-status { display:inline-flex; align-items:center; gap:6px; font-size:0.8rem; font-weight:600; color:var(--text-secondary); }
+.cl-status-dot { width:7px; height:7px; border-radius:50%; background:#34D399; box-shadow:0 0 0 2px rgba(52,211,153,.2); }
+.cl-status-dot.warning  { background:#FBBF24; box-shadow:0 0 0 2px rgba(251,191,36,.2); }
+.cl-status-dot.critical { background:#F43F5E; box-shadow:0 0 0 2px rgba(244,63,94,.2); }
+
+.view-action {
+    display:inline-flex; align-items:center; gap:5px; font-size:0.78rem; font-weight:600;
+    color:var(--accent-indigo); text-decoration:none; padding:5px 12px; border-radius:7px;
+    border:1px solid rgba(99,102,241,0.2); background:rgba(99,102,241,0.06); transition:var(--transition);
+    white-space:nowrap;
+}
+.view-action:hover { background:var(--accent-blue); color:#fff; border-color:var(--accent-blue); }
+.view-action svg { width:12px; height:12px; }
+
+.loading-state { text-align:center; padding:60px 20px; color:var(--text-muted); }
+.loading-spinner { width:36px; height:36px; border:3px solid var(--border-card); border-top-color:var(--accent-blue); border-radius:50%; margin:0 auto 14px; animation:spin .8s linear infinite; }
+@keyframes spin { to { transform:rotate(360deg); } }
+
+.summary-strip { display:flex; gap:12px; margin-bottom:20px; flex-wrap:wrap; }
+.strip-item {
+    background:var(--bg-card); border:1px solid var(--border-card); border-radius:var(--radius-lg);
+    padding:14px 20px; display:flex; align-items:center; gap:12px; flex:1; min-width:140px;
+    box-shadow:var(--shadow-sm); backdrop-filter:blur(8px);
+}
+.strip-val { font-size:1.45rem; font-weight:900; color:var(--text-primary); }
+.strip-lbl { font-size:0.68rem; font-weight:700; color:var(--text-muted); text-transform:uppercase; letter-spacing:.05em; }
+.strip-icon { width:34px; height:34px; border-radius:9px; display:flex; align-items:center; justify-content:center; }
+.strip-icon svg { width:17px; height:17px; }
+.si-blue   { background:rgba(99,102,241,0.15); stroke:#818CF8; }
+.si-indigo { background:rgba(129,140,248,0.12); stroke:#A78BFA; }
+.si-orange { background:rgba(249,115,22,0.12);  stroke:#F97316; }
+</style>
+</head>
+<body>
+<!-- ═══ SIDEBAR ═══ -->
+<aside class="sidebar" id="sidebar">
+  <div class="sidebar-logo"><div class="logo-icon-box"><img src="/static/img/logo.png" alt="Sentrium Security"></div></div>
+  <div class="sidebar-search">
+    <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+    <input type="text" placeholder="Search clients..." id="search-input">
+  </div>
+  <nav class="sidebar-nav">
+    <a href="/" class="nav-item active">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+      <span>Dashboard</span>
+    </a>
+    <a href="#" class="nav-item">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-2 2 2 2 0 01-2-2v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 01-2-2 2 2 0 012-2h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 012-2 2 2 0 012 2v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 012 2 2 2 0 01-2 2h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+      <span>Settings</span>
+    </a>
+  </nav>
+</aside>
+
+<!-- ═══ MAIN ═══ -->
+<main class="main-content">
+  <header class="topbar">
+    <div class="topbar-left">
+      <h1 class="page-title">Security Operations Center — Client Overview</h1>
+      <p class="page-subtitle">Select a client to view their environment and security data</p>
+    </div>
+    <div class="topbar-right">
+      <div class="system-status" id="system-status"><span class="status-dot"></span><span class="status-text">All System Operational</span></div>
+      <a href="/logout" class="topbar-icon-btn user-btn" title="Sign Out">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+      </a>
+    </div>
+  </header>
+
+  <!-- Summary strip (counts only, no sensitive metrics) -->
+  <div class="summary-strip" id="summary-strip">
+    <div class="strip-item">
+      <div class="strip-icon si-blue"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg></div>
+      <div><div class="strip-val" id="total-clients">—</div><div class="strip-lbl">Total Clients</div></div>
+    </div>
+    <div class="strip-item">
+      <div class="strip-icon si-indigo"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg></div>
+      <div><div class="strip-val" id="s1-count">—</div><div class="strip-lbl">SentinelOne Clients</div></div>
+    </div>
+    <div class="strip-item">
+      <div class="strip-icon si-orange"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/></svg></div>
+      <div><div class="strip-val" id="av-count">—</div><div class="strip-lbl">AlienVault Clients</div></div>
+    </div>
+  </div>
+
+  <!-- Filter pills -->
+  <div class="filter-bar">
+    <button class="filter-pill active" data-filter="all">All Clients</button>
+    <button class="filter-pill filter-pill-s1" data-filter="SentinelOne">SentinelOne Only</button>
+    <button class="filter-pill filter-pill-av" data-filter="AlienVault">AlienVault Only</button>
+    <button class="filter-pill" data-filter="both">Both Platforms</button>
+  </div>
+
+  <!-- List header -->
+  <div class="list-header">
+    <h2>Managed Clients</h2>
+    <span class="client-count" id="client-count">Loading...</span>
+  </div>
+
+  <!-- Client list -->
+  <div class="client-list-card">
+    <table class="client-list-table" id="client-list-table">
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>Client Name</th>
+          <th>Platform</th>
+          <th>Status</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody id="clients-tbody">
+        <tr><td colspan="5"><div class="loading-state"><div class="loading-spinner"></div><p>Discovering clients from SentinelOne &amp; AlienVault...</p></div></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Live indicator -->
+  <div class="live-indicator" id="live-indicator">
+    <span class="live-pulse"></span>
+    <span class="live-text">Last updated: <span id="last-updated">connecting...</span></span>
+  </div>
+</main>
+
+<!-- Right strip -->
+<aside class="right-strip"><div class="strip-text"><span>Sentrium Security</span><span class="strip-year">SOC Dashboard</span></div></aside>
+
+<script>
+const WS_URL = "{{ ws_url }}";
+let ws = null, lastUpdateTime = null, currentFilter = 'all', allClients = [];
+
+// ── Filter pills ──
+document.querySelectorAll('.filter-pill').forEach(pill => {
+    pill.addEventListener('click', () => {
+        document.querySelectorAll('.filter-pill').forEach(p => p.classList.remove('active'));
+        pill.classList.add('active');
+        currentFilter = pill.dataset.filter;
+        renderTable(allClients);
+    });
+});
+
+// ── Search ──
+document.getElementById('search-input').addEventListener('input', e => {
+    renderTable(allClients, e.target.value.toLowerCase().trim());
+});
+
+function connectWS() {
+    ws = new WebSocket(WS_URL);
+    ws.onopen  = () => document.getElementById('live-indicator').classList.remove('disconnected');
+    ws.onmessage = e => {
+        try { handleState(JSON.parse(e.data)); lastUpdateTime = new Date(); } catch(err) {}
+    };
+    ws.onclose = () => {
+        document.getElementById('live-indicator').classList.add('disconnected');
+        setTimeout(connectWS, 3000);
+    };
+    ws.onerror = () => ws.close();
+}
+
+function handleState(state) {
+    allClients = state.clients || [];
+
+    // Summary strip
+    document.getElementById('total-clients').textContent = allClients.length;
+    document.getElementById('s1-count').textContent = allClients.filter(c => c.platforms.includes('SentinelOne')).length;
+    document.getElementById('av-count').textContent = allClients.filter(c => c.platforms.includes('AlienVault')).length;
+    document.getElementById('client-count').textContent = `${allClients.length} clients monitored`;
+
+    // System status
+    const statusEl = document.getElementById('system-status');
+    statusEl.classList.remove('degraded','error');
+    const txt = statusEl.querySelector('.status-text');
+    if (state.system_status === 'degraded') { statusEl.classList.add('degraded'); txt.textContent = 'Partial Connectivity'; }
+    else if (state.system_status === 'error' || state.system_status === 'unconfigured') { statusEl.classList.add('error'); txt.textContent = 'Configuration Required'; }
+    else { txt.textContent = 'All System Operational'; }
+
+    const searchVal = document.getElementById('search-input').value.toLowerCase().trim();
+    renderTable(allClients, searchVal);
+}
+
+function renderTable(clients, search = '') {
+    const tbody = document.getElementById('clients-tbody');
+
+    const filtered = clients
+        .filter(c => {
+            if (search && !c.name.toLowerCase().includes(search)) return false;
+            if (currentFilter === 'SentinelOne') return c.platforms.includes('SentinelOne') && !c.platforms.includes('AlienVault');
+            if (currentFilter === 'AlienVault')  return c.platforms.includes('AlienVault') && !c.platforms.includes('SentinelOne');
+            if (currentFilter === 'both') return c.platforms.includes('SentinelOne') && c.platforms.includes('AlienVault');
+            return true;
+        })
+        .sort((a, b) => a.name.localeCompare(b.name)); // alphabetical
+
+    if (!filtered.length) {
+        tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:40px;color:var(--text-muted);">No clients match the current filter.</td></tr>';
+        return;
+    }
+
+    tbody.innerHTML = filtered.map((c, i) => {
+        const platforms = c.platforms || [];
+        const pills = platforms.map(p =>
+            p === 'SentinelOne'
+                ? '<span class="plat-pill plat-pill-s1"><span class="plat-dot"></span>S1</span>'
+                : '<span class="plat-pill plat-pill-av"><span class="plat-dot"></span>AV</span>'
+        ).join('');
+
+        // Status based on threat level (no number exposed, just health state)
+        let dotClass = '', statusLabel = 'Healthy';
+        if (c.total_threats > 10)     { dotClass = 'critical'; statusLabel = 'Critical'; }
+        else if (c.total_threats > 0) { dotClass = 'warning';  statusLabel = 'Alert'; }
+
+        const enc = encodeURIComponent(c.name);
+        return `<tr onclick="window.location='/client/${enc}'">
+            <td><span class="cl-index">${i + 1}</span></td>
+            <td><span class="cl-name">${escHtml(c.name)}</span></td>
+            <td><div class="plat-pills">${pills}</div></td>
+            <td><span class="cl-status"><span class="cl-status-dot ${dotClass}"></span>${statusLabel}</span></td>
+            <td style="text-align:right;"><a href="/client/${enc}" class="view-action" onclick="event.stopPropagation()">View Dashboard <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"/></svg></a></td>
+        </tr>`;
+    }).join('');
+}
+
+// Update timer
+setInterval(() => {
+    if (!lastUpdateTime) return;
+    const s = Math.floor((Date.now() - lastUpdateTime.getTime()) / 1000);
+    document.getElementById('last-updated').textContent = s < 5 ? 'just now' : s < 60 ? `${s}s ago` : `${Math.floor(s/60)}m ago`;
+}, 1000);
+
+function escHtml(s) { const d = document.createElement('div'); d.textContent = s||''; return d.innerHTML; }
+
+connectWS();
+</script>
+</body>
+</html>
