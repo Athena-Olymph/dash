@@ -52,10 +52,18 @@
 <aside class="sidebar" id="sidebar">
   <div class="brand">Sentrium</div>
 
+  {% if role == "analyst" %}
+  <a href="/analyst" class="nav-back">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>
+    Analyst Portal
+  </a>
+  {% elif role == "admin" %}
   <a href="/" class="nav-back">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>
     All Clients
   </a>
+  {% endif %}
+  <!-- client role: no back nav -->
 
   <div class="client-identity">
     <div class="client-identity-name" id="sidebar-client-name">{{ client_name }}</div>
@@ -262,7 +270,7 @@
 <div class="reconnect-overlay" id="reconnect-overlay"><div class="reconnect-box"><div class="reconnect-spinner"></div><p>Reconnecting…</p></div></div>
 
 <script>
-const WS_URL="{{ws_url}}",CLIENT_NAME="{{client_name}}",REFRESH_INTERVAL={{refresh_interval}};
+const WS_URL="{{ws_url}}",CLIENT_NAME="{{client_name}}",REFRESH_INTERVAL={{refresh_interval}},ROLE="{{role}}";
 </script>
 <script src="/static/js/charts.js?v=9"></script>
 <script src="/static/js/dashboard.js?v=9"></script>
