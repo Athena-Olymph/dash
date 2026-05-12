@@ -1,11 +1,11 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="dark">
 <head>
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
 <title>Sentrium SOC — Client Overview</title>
 <meta name="description" content="Sentrium Integrated Security Operations Center — Client Overview">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="/static/css/dashboard.css?v=7">
+<link rel="stylesheet" href="/static/css/dashboard.css?v=8">
 <style>
 /* ── Client List ── */
 .list-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:14px; }
@@ -37,6 +37,8 @@
 .client-list-table tbody tr:last-child td { border-bottom:none; }
 .client-list-table tbody tr { cursor:pointer; transition:background .15s; }
 .client-list-table tbody tr:hover { background:var(--bg-hover); }
+.client-list-table tbody tr:nth-child(even) { background:rgba(255,255,255,0.015); }
+[data-theme="light"] .client-list-table tbody tr:nth-child(even) { background:rgba(0,0,0,0.015); }
 
 .cl-name { font-size:0.88rem; font-weight:700; color:var(--text-primary); }
 .cl-index { font-size:0.72rem; color:var(--text-muted); font-weight:500; min-width:20px; }
@@ -63,14 +65,16 @@
 
 .loading-state { text-align:center; padding:60px 20px; color:var(--text-muted); }
 .loading-spinner { width:36px; height:36px; border:3px solid var(--border-card); border-top-color:var(--accent-blue); border-radius:50%; margin:0 auto 14px; animation:spin .8s linear infinite; }
-@keyframes spin { to { transform:rotate(360deg); } }
 
 .summary-strip { display:flex; gap:12px; margin-bottom:20px; flex-wrap:wrap; }
 .strip-item {
     background:var(--bg-card); border:1px solid var(--border-card); border-radius:var(--radius-lg);
     padding:14px 20px; display:flex; align-items:center; gap:12px; flex:1; min-width:140px;
     box-shadow:var(--shadow-sm); backdrop-filter:blur(8px);
+    transition:var(--transition);
 }
+.strip-item:hover { box-shadow:var(--shadow-md); border-color: rgba(255,255,255,0.14); }
+[data-theme="light"] .strip-item:hover { border-color: rgba(0,0,0,0.14); }
 .strip-val { font-size:1.45rem; font-weight:900; color:var(--text-primary); }
 .strip-lbl { font-size:0.68rem; font-weight:700; color:var(--text-muted); text-transform:uppercase; letter-spacing:.05em; }
 .strip-icon { width:34px; height:34px; border-radius:9px; display:flex; align-items:center; justify-content:center; }
@@ -78,9 +82,23 @@
 .si-blue   { background:rgba(99,102,241,0.15); stroke:#818CF8; }
 .si-indigo { background:rgba(129,140,248,0.12); stroke:#A78BFA; }
 .si-orange { background:rgba(249,115,22,0.12);  stroke:#F97316; }
+
+/* Mobile filter scroll */
+@media(max-width:768px) {
+    .filter-bar { overflow-x: auto; flex-wrap: nowrap; padding-bottom: 4px; -webkit-overflow-scrolling: touch; }
+    .filter-bar::-webkit-scrollbar { height: 2px; }
+    .client-list-table th, .client-list-table td { padding: 10px 12px; }
+    .client-list-table { font-size: 0.82rem; }
+}
 </style>
 </head>
 <body>
+<!-- ═══ NOTIFICATION CONTAINER ═══ -->
+<div class="notification-container" id="notification-container"></div>
+
+<!-- ═══ SIDEBAR OVERLAY (mobile) ═══ -->
+<div class="sidebar-overlay" id="sidebar-overlay"></div>
+
 <!-- ═══ SIDEBAR ═══ -->
 <aside class="sidebar" id="sidebar">
   <div class="sidebar-logo"><div class="logo-icon-box"><img src="/static/img/logo.png" alt="Sentrium Security"></div></div>
@@ -98,14 +116,25 @@
       <span>Settings</span>
     </a>
   </nav>
+  <!-- Theme toggle -->
+  <button class="theme-toggle" id="theme-toggle" title="Toggle theme" onclick="toggleTheme()">
+    <svg id="theme-icon-dark" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></svg>
+    <svg id="theme-icon-light" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:none;"><circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
+    <span class="toggle-label" id="theme-label">Dark Mode</span>
+  </button>
 </aside>
 
 <!-- ═══ MAIN ═══ -->
 <main class="main-content">
   <header class="topbar">
     <div class="topbar-left">
-      <h1 class="page-title">Security Operations Center — Client Overview</h1>
-      <p class="page-subtitle">Select a client to view their environment and security data</p>
+      <button class="hamburger" id="hamburger" onclick="toggleMobileMenu()" aria-label="Toggle menu">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+      </button>
+      <div>
+        <h1 class="page-title">Security Operations Center — Client Overview</h1>
+        <p class="page-subtitle">Select a client to view their environment and security data</p>
+      </div>
     </div>
     <div class="topbar-right">
       <div class="system-status" id="system-status"><span class="status-dot"></span><span class="status-text">All System Operational</span></div>
@@ -115,19 +144,19 @@
     </div>
   </header>
 
-  <!-- Summary strip (counts only, no sensitive metrics) -->
+  <!-- Summary strip -->
   <div class="summary-strip" id="summary-strip">
     <div class="strip-item">
       <div class="strip-icon si-blue"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg></div>
-      <div><div class="strip-val" id="total-clients">—</div><div class="strip-lbl">Total Clients</div></div>
+      <div><div class="strip-val" id="total-clients"><span class="skeleton skeleton-value" style="width:40px;"></span></div><div class="strip-lbl">Total Clients</div></div>
     </div>
     <div class="strip-item">
       <div class="strip-icon si-indigo"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg></div>
-      <div><div class="strip-val" id="s1-count">—</div><div class="strip-lbl">SentinelOne Clients</div></div>
+      <div><div class="strip-val" id="s1-count"><span class="skeleton skeleton-value" style="width:30px;"></span></div><div class="strip-lbl">SentinelOne Clients</div></div>
     </div>
     <div class="strip-item">
       <div class="strip-icon si-orange"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/></svg></div>
-      <div><div class="strip-val" id="av-count">—</div><div class="strip-lbl">AlienVault Clients</div></div>
+      <div><div class="strip-val" id="av-count"><span class="skeleton skeleton-value" style="width:30px;"></span></div><div class="strip-lbl">AlienVault Clients</div></div>
     </div>
   </div>
 
@@ -142,7 +171,7 @@
   <!-- List header -->
   <div class="list-header">
     <h2>Managed Clients</h2>
-    <span class="client-count" id="client-count">Loading...</span>
+    <span class="client-count" id="client-count"><span class="skeleton skeleton-pill"></span></span>
   </div>
 
   <!-- Client list -->
@@ -158,7 +187,16 @@
         </tr>
       </thead>
       <tbody id="clients-tbody">
-        <tr><td colspan="5"><div class="loading-state"><div class="loading-spinner"></div><p>Discovering clients from SentinelOne &amp; AlienVault...</p></div></td></tr>
+        <tr><td colspan="5"><div class="loading-state" id="loading-skeleton">
+          <div style="padding:20px;">
+            <div class="skeleton skeleton-row" style="width:95%"></div>
+            <div class="skeleton skeleton-row" style="width:90%"></div>
+            <div class="skeleton skeleton-row" style="width:85%"></div>
+            <div class="skeleton skeleton-row" style="width:92%"></div>
+            <div class="skeleton skeleton-row" style="width:88%"></div>
+          </div>
+          <p style="font-size:0.78rem;color:var(--text-muted);margin-top:4px;">Discovering clients from SentinelOne &amp; AlienVault...</p>
+        </div></td></tr>
       </tbody>
     </table>
   </div>
@@ -174,10 +212,55 @@
 <aside class="right-strip"><div class="strip-text"><span>Sentrium Security</span><span class="strip-year">SOC Dashboard</span></div></aside>
 
 <script>
+// ═══ CONFIG ═══
 const WS_URL = "{{ ws_url }}";
 let ws = null, lastUpdateTime = null, currentFilter = 'all', allClients = [];
 
-// ── Filter pills ──
+// ═══ THEME ═══
+function getTheme() { return localStorage.getItem('soc-theme') || 'dark'; }
+function setTheme(theme) {
+    document.documentElement.setAttribute('data-theme', theme);
+    localStorage.setItem('soc-theme', theme);
+    const darkIcon = document.getElementById('theme-icon-dark');
+    const lightIcon = document.getElementById('theme-icon-light');
+    const label = document.getElementById('theme-label');
+    if (theme === 'dark') {
+        darkIcon.style.display = ''; lightIcon.style.display = 'none';
+        label.textContent = 'Dark Mode';
+    } else {
+        darkIcon.style.display = 'none'; lightIcon.style.display = '';
+        label.textContent = 'Light Mode';
+    }
+}
+function toggleTheme() { setTheme(getTheme() === 'dark' ? 'light' : 'dark'); }
+(function initTheme() { setTheme(getTheme()); })();
+
+// ═══ NOTIFICATIONS ═══
+function showNotification(title, desc, type) {
+    const container = document.getElementById('notification-container');
+    if (!container) return;
+    const icons = {
+        success: '<svg class="toast-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>',
+        error: '<svg class="toast-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>',
+        warning: '<svg class="toast-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>',
+        info: '<svg class="toast-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>',
+    };
+    const toast = document.createElement('div');
+    toast.className = `toast toast-${type}`;
+    toast.innerHTML = icons[type] || icons.info;
+    toast.innerHTML += `<div class="toast-content"><div class="toast-title">${escHtml(title)}</div>${desc ? `<div class="toast-desc">${escHtml(desc)}</div>` : ''}</div>`;
+    toast.innerHTML += '<svg class="toast-close" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>';
+    container.appendChild(toast);
+    toast.addEventListener('click', () => dismissToast(toast));
+    setTimeout(() => dismissToast(toast), 5000);
+}
+function dismissToast(toast) {
+    if (toast.classList.contains('toast-out')) return;
+    toast.classList.add('toast-out');
+    setTimeout(() => toast.remove(), 350);
+}
+
+// ═══ FILTER PILLS ═══
 document.querySelectorAll('.filter-pill').forEach(pill => {
     pill.addEventListener('click', () => {
         document.querySelectorAll('.filter-pill').forEach(p => p.classList.remove('active'));
@@ -187,26 +270,46 @@ document.querySelectorAll('.filter-pill').forEach(pill => {
     });
 });
 
-// ── Search ──
+// ═══ SEARCH ═══
 document.getElementById('search-input').addEventListener('input', e => {
     renderTable(allClients, e.target.value.toLowerCase().trim());
 });
 
+// ═══ MOBILE MENU ═══
+function toggleMobileMenu() {
+    const sidebar = document.getElementById('sidebar');
+    const overlay = document.getElementById('sidebar-overlay');
+    const hamburger = document.getElementById('hamburger');
+    sidebar.classList.toggle('open');
+    overlay.classList.toggle('visible');
+    hamburger.classList.toggle('active');
+}
+document.getElementById('sidebar-overlay').addEventListener('click', toggleMobileMenu);
+
+// ═══ WEBSOCKET ═══
 function connectWS() {
     ws = new WebSocket(WS_URL);
-    ws.onopen  = () => document.getElementById('live-indicator').classList.remove('disconnected');
+    ws.onopen  = () => {
+        document.getElementById('live-indicator').classList.remove('disconnected');
+        showNotification('Connected', 'Real-time updates active', 'success');
+    };
     ws.onmessage = e => {
         try { handleState(JSON.parse(e.data)); lastUpdateTime = new Date(); } catch(err) {}
     };
     ws.onclose = () => {
         document.getElementById('live-indicator').classList.add('disconnected');
+        showNotification('Disconnected', 'Attempting to reconnect...', 'warning');
         setTimeout(connectWS, 3000);
     };
     ws.onerror = () => ws.close();
 }
 
+// ═══ STATE HANDLER ═══
 function handleState(state) {
     allClients = state.clients || [];
+
+    // Hide skeleton
+    document.getElementById('loading-skeleton')?.style.setProperty('display', 'none');
 
     // Summary strip
     document.getElementById('total-clients').textContent = allClients.length;
@@ -226,6 +329,7 @@ function handleState(state) {
     renderTable(allClients, searchVal);
 }
 
+// ═══ TABLE RENDERER ═══
 function renderTable(clients, search = '') {
     const tbody = document.getElementById('clients-tbody');
 
@@ -237,7 +341,7 @@ function renderTable(clients, search = '') {
             if (currentFilter === 'both') return c.platforms.includes('SentinelOne') && c.platforms.includes('AlienVault');
             return true;
         })
-        .sort((a, b) => a.name.localeCompare(b.name)); // alphabetical
+        .sort((a, b) => a.name.localeCompare(b.name));
 
     if (!filtered.length) {
         tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:40px;color:var(--text-muted);">No clients match the current filter.</td></tr>';
@@ -252,7 +356,6 @@ function renderTable(clients, search = '') {
                 : '<span class="plat-pill plat-pill-av"><span class="plat-dot"></span>AV</span>'
         ).join('');
 
-        // Status based on threat level (no number exposed, just health state)
         let dotClass = '', statusLabel = 'Healthy';
         if (c.total_threats > 10)     { dotClass = 'critical'; statusLabel = 'Critical'; }
         else if (c.total_threats > 0) { dotClass = 'warning';  statusLabel = 'Alert'; }
@@ -268,13 +371,14 @@ function renderTable(clients, search = '') {
     }).join('');
 }
 
-// Update timer
+// ═══ TIMER ═══
 setInterval(() => {
     if (!lastUpdateTime) return;
     const s = Math.floor((Date.now() - lastUpdateTime.getTime()) / 1000);
     document.getElementById('last-updated').textContent = s < 5 ? 'just now' : s < 60 ? `${s}s ago` : `${Math.floor(s/60)}m ago`;
 }, 1000);
 
+// ═══ HELPERS ═══
 function escHtml(s) { const d = document.createElement('div'); d.textContent = s||''; return d.innerHTML; }
 
 connectWS();
