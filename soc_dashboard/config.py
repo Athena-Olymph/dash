@@ -81,6 +81,14 @@ class Settings:
         except json.JSONDecodeError:
             return {}
 
+    @property
+    def ADMIN_USERNAME(self) -> str:
+        return os.getenv("ADMIN_USERNAME", "admin")
+
+    @property
+    def ADMIN_PASSWORD(self) -> str:
+        return os.getenv("ADMIN_PASSWORD", "")
+
     def s1_configured(self) -> bool:
         return bool(self.S1_API_TOKEN)
 
