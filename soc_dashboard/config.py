@@ -1,11 +1,11 @@
 """
 Sentrium Integrated SOC Dashboard — Configuration
 All settings loaded from environment variables.
-On Railway: env vars are injected natively — no .env file needed.
-For local dev: set variables in your shell or use a .env file manually.
 """
 
+from __future__ import annotations
 import os
+import json
 
 class Settings:
     """Application settings — sourced from environment variables."""
@@ -21,7 +21,6 @@ class Settings:
     @property
     def AV_SUBDOMAIN(self) -> str:
         val = os.getenv("AV_SUBDOMAIN", "cybervergent-central.alienvault.cloud")
-        # Strip whitespace, newlines, quotes, and any accidental https:// prefix
         val = val.strip().strip('"').strip("'").replace("https://", "").replace("http://", "").rstrip("/")
         return val
 
@@ -59,6 +58,28 @@ class Settings:
     @property
     def SECRET_KEY(self) -> str:
         return os.getenv("SECRET_KEY", "sentrium-soc-dashboard-secret-key-change-me")
+
+    @property
+    def CLIENT_CREDENTIALS(self) -> dict[str, str]:
+        """JSON object mapping client usernames to passwords.
+        Example: {"acme-corp":"secret1","globex":"secret2"}
+        """
+        raw = os.getenv("CLIENT_CREDENTIALS", "{}")
+        try:
+            return json.loads(raw)
+        except json.JSONDecodeError:
+            return {}
+
+    @property
+    def ANALYST_CREDENTIALS(self) -> dict[str, str]:
+        """JSON object mapping analyst usernames to passwords.
+        Example: {"soc-analyst":"secret1"}
+        """
+        raw = os.getenv("ANALYST_CREDENTIALS", "{}")
+        try:
+            return json.loads(raw)
+        except json.JSONDecodeError:
+            return {}
 
     def s1_configured(self) -> bool:
         return bool(self.S1_API_TOKEN)
