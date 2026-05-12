@@ -39,12 +39,16 @@ def verify_analyst_password(username: str, password: str) -> bool:
     return False
 
 def resolve_client_name(username: str) -> str | None:
-    """Return the client name associated with this username.
-    By default the username IS the client name.
+    """Return the real client display name for this username.
+
+    Resolution order:
+    1. CLIENT_NAME_MAP env var  → maps login username to exact S1/AV display name
+    2. Fall back to the username itself (works when username == client name)
     """
-    if username in settings.CLIENT_CREDENTIALS:
-        return username
-    return None
+    if username not in settings.CLIENT_CREDENTIALS:
+        return None
+    name_map = settings.CLIENT_NAME_MAP
+    return name_map.get(username, username)
 
 # ── TOTP ───────────────────────────────────────────────────────
 
