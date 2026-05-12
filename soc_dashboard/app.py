@@ -119,7 +119,7 @@ def _client_name(request: Request) -> str | None:
 
 @app.get("/login", response_class=HTMLResponse)
 async def login_page(request: Request):
-    """Login page with tabbed auth: Admin (TOTP) | Client/Analyst (password)."""
+    """Login page — unified credentials form. Admins then get a TOTP step."""
     if _authenticated(request):
         role = _role(request)
         if role == "admin":
@@ -138,10 +138,8 @@ async def login_page(request: Request):
         name="login.html",
         context={
             "error": None,
+            "step": "credentials",
             "totp_configured": settings.totp_configured(),
-            "clients_configured": len(settings.CLIENT_CREDENTIALS) > 0,
-            "analysts_configured": len(settings.ANALYST_CREDENTIALS) > 0,
-            "mode": "admin",  # default tab
         },
     )
 
@@ -149,15 +147,79 @@ async def login_page(request: Request):
 @app.post("/login", response_class=HTMLResponse)
 async def login_submit(
     request: Request,
-    login_mode: str = Form("admin"),
-    totp_code: str = Form(""),
+    step: str = Form("credentials"),
     username: str = Form(""),
     password: str = Form(""),
+    totp_code: str = Form(""),
 ):
-    """Handle login form submission for admin, client, or analyst."""
+    """Handle login — everyone starts with credentials.
+    Admins proceed to a TOTP step; clients/analysts go straight through.
+    """
 
-    # ── Admin (TOTP) ──────────────────────────────────────
-    if login_mode == "admin":
+    # ── Step 1: Credentials ─────────────────────────────────
+    if step == "credentials":
+        # Try admin
+        if settings.ADMIN_PASSWORD and verify_admin_password(username, password):
+            if settings.totp_configured():
+                return templates.TemplateResponse(
+                    request=request, name="login.html",
+                    context={
+                        "error": None,
+                        "step": "totp",
+                        "totp_configured": True,
+                        "username": username,
+                    },
+                )
+            else:
+                # No TOTP configured — log in directly
+                token = create_session(role="admin")
+                response = RedirectResponse(url="/", status_code=302)
+                response.set_cookie(
+                    key=SESSION_COOKIE, value=token,
+                    httponly=True, samesite="lax",
+                    max_age=settings.SESSION_TIMEOUT_MINUTES * 60,
+                )
+                logger.info("Admin authenticated (no TOTP)")
+                return response
+
+        # Try client
+        if verify_client_password(username, password):
+            cname = resolve_client_name(username)
+            if cname:
+                token = create_session(role="client", client_name=cname)
+                response = RedirectResponse(url=f"/client/{cname}", status_code=302)
+                response.set_cookie(
+                    key=SESSION_COOKIE, value=token,
+                    httponly=True, samesite="lax",
+                    max_age=settings.SESSION_TIMEOUT_MINUTES * 60,
+                )
+                logger.info(f"Client '{cname}' authenticated")
+                return response
+
+        # Try analyst
+        if verify_analyst_password(username, password):
+            token = create_session(role="analyst")
+            response = RedirectResponse(url="/analyst", status_code=302)
+            response.set_cookie(
+                key=SESSION_COOKIE, value=token,
+                httponly=True, samesite="lax",
+                max_age=settings.SESSION_TIMEOUT_MINUTES * 60,
+            )
+            logger.info(f"Analyst '{username}' authenticated")
+            return response
+
+        # No match
+        return templates.TemplateResponse(
+            request=request, name="login.html",
+            context={
+                "error": "Invalid credentials.",
+                "step": "credentials",
+                "totp_configured": settings.totp_configured(),
+            },
+        )
+
+    # ── Step 2: TOTP (admin only) ───────────────────────────
+    if step == "totp":
         if verify_totp(totp_code.strip()):
             token = create_session(role="admin")
             response = RedirectResponse(url="/", status_code=302)
@@ -172,71 +234,13 @@ async def login_submit(
             request=request, name="login.html",
             context={
                 "error": "Invalid verification code.",
-                "totp_configured": settings.totp_configured(),
-                "clients_configured": len(settings.CLIENT_CREDENTIALS) > 0,
-                "analysts_configured": len(settings.ANALYST_CREDENTIALS) > 0,
-                "mode": "admin",
+                "step": "totp",
+                "totp_configured": True,
+                "username": username,
             },
         )
 
-    # ── Client ────────────────────────────────────────────
-    if login_mode == "client":
-        if verify_client_password(username, password):
-            cname = resolve_client_name(username)
-            if cname:
-                token = create_session(role="client", client_name=cname)
-                response = RedirectResponse(url=f"/client/{cname}", status_code=302)
-                response.set_cookie(
-                    key=SESSION_COOKIE, value=token,
-                    httponly=True, samesite="lax",
-                    max_age=settings.SESSION_TIMEOUT_MINUTES * 60,
-                )
-                logger.info(f"Client '{cname}' authenticated")
-                return response
-        return templates.TemplateResponse(
-            request=request, name="login.html",
-            context={
-                "error": "Invalid client credentials.",
-                "totp_configured": settings.totp_configured(),
-                "clients_configured": len(settings.CLIENT_CREDENTIALS) > 0,
-                "analysts_configured": len(settings.ANALYST_CREDENTIALS) > 0,
-                "mode": "client",
-            },
-        )
-
-    # ── Analyst ───────────────────────────────────────────
-    if login_mode == "analyst":
-        if verify_analyst_password(username, password):
-            token = create_session(role="analyst")
-            response = RedirectResponse(url="/analyst", status_code=302)
-            response.set_cookie(
-                key=SESSION_COOKIE, value=token,
-                httponly=True, samesite="lax",
-                max_age=settings.SESSION_TIMEOUT_MINUTES * 60,
-            )
-            logger.info(f"Analyst '{username}' authenticated")
-            return response
-        return templates.TemplateResponse(
-            request=request, name="login.html",
-            context={
-                "error": "Invalid analyst credentials.",
-                "totp_configured": settings.totp_configured(),
-                "clients_configured": len(settings.CLIENT_CREDENTIALS) > 0,
-                "analysts_configured": len(settings.ANALYST_CREDENTIALS) > 0,
-                "mode": "analyst",
-            },
-        )
-
-    return templates.TemplateResponse(
-        request=request, name="login.html",
-        context={
-            "error": "Invalid login request.",
-            "totp_configured": settings.totp_configured(),
-            "clients_configured": len(settings.CLIENT_CREDENTIALS) > 0,
-            "analysts_configured": len(settings.ANALYST_CREDENTIALS) > 0,
-            "mode": "admin",
-        },
-    )
+    return RedirectResponse(url="/login", status_code=302)
 
 
 @app.get("/logout")
