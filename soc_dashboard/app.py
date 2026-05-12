@@ -6,6 +6,8 @@ Multi-role: admin, client, analyst.
 from __future__ import annotations
 import asyncio
 import logging
+import os
+import traceback
 from pathlib import Path
 from contextlib import asynccontextmanager
 
@@ -16,7 +18,8 @@ from fastapi.templating import Jinja2Templates
 
 from config import settings
 from auth import (
-    verify_totp, verify_client_password, verify_analyst_password,
+    verify_admin_password, verify_totp,
+    verify_client_password, verify_analyst_password,
     resolve_client_name,
     create_session, validate_session, destroy_session,
     get_session_role, get_session_client,
@@ -82,6 +85,21 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="Sentrium Integrated SOC Dashboard", version="1.0.0", lifespan=lifespan)
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
+
+
+# ── Global error handler — logs full traceback to Railway ──────
+from fastapi import HTTPException
+from fastapi.responses import JSONResponse as _JSONResponse
+from starlette.requests import Request as _Request
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request: _Request, exc: Exception):
+    tb = traceback.format_exc()
+    logger.error(f"Unhandled exception on {request.method} {request.url}:\n{tb}")
+    return _JSONResponse(
+        status_code=500,
+        content={"error": str(exc), "type": type(exc).__name__, "path": str(request.url)},
+    )
 
 
 # ════════════════════════════════════════════════════════════════
@@ -387,6 +405,28 @@ async def health():
         "av_configured": settings.av_configured(),
         "ws_connections": ws_manager.active_count,
     }
+
+
+@app.get("/api/debug/auth")
+async def debug_auth(request: Request):
+    """Safe auth diagnostic — shows credential counts & usernames, never passwords."""
+    if not _require_role(request, "admin"):
+        return JSONResponse({"error": "Admin only"}, status_code=403)
+    client_creds  = settings.CLIENT_CREDENTIALS
+    analyst_creds = settings.ANALYST_CREDENTIALS
+    name_map      = settings.CLIENT_NAME_MAP
+    return JSONResponse({
+        "admin_username":     settings.ADMIN_USERNAME,
+        "admin_password_set": bool(settings.ADMIN_PASSWORD),
+        "totp_configured":    settings.totp_configured(),
+        "client_count":       len(client_creds),
+        "client_usernames":   list(client_creds.keys()),
+        "client_name_map":    name_map,
+        "analyst_count":      len(analyst_creds),
+        "analyst_usernames":  list(analyst_creds.keys()),
+        "raw_analyst_env":    repr(os.getenv("ANALYST_CREDENTIALS", "NOT_SET")[:80]),
+        "raw_client_env":     repr(os.getenv("CLIENT_CREDENTIALS",  "NOT_SET")[:80]),
+    })
 
 
 @app.get("/api/debug/av")
