@@ -6,6 +6,9 @@ All settings loaded from environment variables.
 from __future__ import annotations
 import os
 import json
+from dotenv import load_dotenv
+
+load_dotenv()
 
 class Settings:
     """Application settings — sourced from environment variables."""
@@ -62,9 +65,22 @@ class Settings:
     @property
     def CLIENT_CREDENTIALS(self) -> dict[str, str]:
         """JSON object mapping client usernames to passwords.
-        Example: {"acme-corp":"secret1","globex":"secret2"}
+        Example: {"xpresspayment":"pass1","zone-payment":"pass2"}
         """
         raw = os.getenv("CLIENT_CREDENTIALS", "{}")
+        try:
+            return json.loads(raw)
+        except json.JSONDecodeError:
+            return {}
+
+    @property
+    def CLIENT_NAME_MAP(self) -> dict[str, str]:
+        """Optional JSON mapping: login username -> exact client display name in S1/AV.
+        Use this when the username differs from the real client name (spaces, casing, etc).
+        Example: {"zone-payment":"Zone Payment Network Limited","xpress":"Xpresspayment"}
+        If a username is NOT in this map, the username itself is used as the client name.
+        """
+        raw = os.getenv("CLIENT_NAME_MAP", "{}")
         try:
             return json.loads(raw)
         except json.JSONDecodeError:
