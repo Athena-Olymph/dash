@@ -18,6 +18,10 @@ _sessions: dict[str, dict] = {}
 
 # ── Password verification ──────────────────────────────────────
 
+def verify_admin_password(username: str, password: str) -> bool:
+    """Verify admin credentials."""
+    return username == settings.ADMIN_USERNAME and password == settings.ADMIN_PASSWORD
+
 def verify_client_password(username: str, password: str) -> bool:
     """Verify a client user's credentials."""
     creds = settings.CLIENT_CREDENTIALS
