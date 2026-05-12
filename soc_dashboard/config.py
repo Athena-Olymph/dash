@@ -105,7 +105,7 @@ class Settings:
 
     @property
     def ADMIN_PASSWORD(self) -> str:
-        return os.getenv("ADMIN_PASSWORD", "Sentrium@2025!")
+        return os.getenv("ADMIN_PASSWORD", "Sentrium@2025")
 
     def s1_configured(self) -> bool:
         return bool(self.S1_API_TOKEN)
