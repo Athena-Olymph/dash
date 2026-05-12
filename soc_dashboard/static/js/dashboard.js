@@ -1,11 +1,88 @@
 'use strict';
-// Sentrium SOC — Per-Client Dashboard JS v7
-// Sidebar nav, conditional EDR, premium renderers
+// Sentrium SOC — Per-Client Dashboard JS v8
+// Theme, notifications, sparklines, skeletons, mobile menu
 
 let ws = null, reconnectAttempts = 0, lastUpdateTime = null, _timer = null;
 const $ = id => document.getElementById(id);
 
-// ── Section switching via sidebar nav ────────────────────────────────────────
+// ═══ THEME ═══
+function getTheme() { return localStorage.getItem('soc-theme') || 'dark'; }
+function setTheme(theme) {
+    document.documentElement.setAttribute('data-theme', theme);
+    localStorage.setItem('soc-theme', theme);
+    const darkIcon = document.getElementById('theme-icon-dark');
+    const lightIcon = document.getElementById('theme-icon-light');
+    const label = document.getElementById('theme-label');
+    if (theme === 'dark') {
+        if (darkIcon) darkIcon.style.display = '';
+        if (lightIcon) lightIcon.style.display = 'none';
+        if (label) label.textContent = 'Dark Mode';
+    } else {
+        if (darkIcon) darkIcon.style.display = 'none';
+        if (lightIcon) lightIcon.style.display = '';
+        if (label) label.textContent = 'Light Mode';
+    }
+}
+function toggleTheme() { setTheme(getTheme() === 'dark' ? 'light' : 'dark'); }
+(function initTheme() { setTheme(getTheme()); })();
+
+// ═══ MOBILE MENU ═══
+function toggleMobileMenu() {
+    const sidebar = document.getElementById('sidebar');
+    const overlay = document.getElementById('sidebar-overlay');
+    const hamburger = document.getElementById('hamburger');
+    if (!sidebar) return;
+    sidebar.classList.toggle('open');
+    if (overlay) overlay.classList.toggle('visible');
+    if (hamburger) hamburger.classList.toggle('active');
+}
+document.getElementById('sidebar-overlay')?.addEventListener('click', toggleMobileMenu);
+
+// ═══ NOTIFICATIONS ═══
+function showNotification(title, desc, type) {
+    const container = document.getElementById('notification-container');
+    if (!container) return;
+    const icons = {
+        success: '<svg class="toast-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>',
+        error: '<svg class="toast-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>',
+        warning: '<svg class="toast-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>',
+        info: '<svg class="toast-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>',
+    };
+    const toast = document.createElement('div');
+    toast.className = `toast toast-${type}`;
+    toast.innerHTML = icons[type] || icons.info;
+    toast.innerHTML += `<div class="toast-content"><div class="toast-title">${esc(title)}</div>${desc ? `<div class="toast-desc">${esc(desc)}</div>` : ''}</div>`;
+    toast.innerHTML += '<svg class="toast-close" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>';
+    container.appendChild(toast);
+    toast.addEventListener('click', () => dismissToast(toast));
+    setTimeout(() => dismissToast(toast), 5000);
+}
+function dismissToast(toast) {
+    if (toast.classList.contains('toast-out')) return;
+    toast.classList.add('toast-out');
+    setTimeout(() => toast.remove(), 350);
+}
+
+// ═══ SPARKLINES ═══
+function renderSparkline(elId, data, color) {
+    const el = document.getElementById(elId);
+    if (!el || !data || data.length < 2) { if (el) el.innerHTML = ''; return; }
+    const values = data.map(d => d.value || 0);
+    const w = 70, h = 38, p = 3;
+    const min = Math.min(...values), max = Math.max(...values) || 1;
+    const range = max - min || 1;
+    const xStep = (w - p * 2) / (values.length - 1);
+    const pts = values.map((v, i) => `${(i * xStep + p).toFixed(1)},${(h - p - ((v - min) / range) * (h - p * 2)).toFixed(1)}`);
+    const line = pts.join(' ');
+    const area = `M${pts[0]} L${pts.slice(1).join(' L')} L${pts[pts.length-1].split(',')[0]},${h - p} L${pts[0].split(',')[0]},${h - p} Z`;
+    el.innerHTML = `<svg viewBox="0 0 ${w} ${h}" xmlns="http://www.w3.org/2000/svg">
+        <defs><linearGradient id="g-${elId}" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="${color}" stop-opacity="0.25"/><stop offset="100%" stop-color="${color}" stop-opacity="0.02"/></linearGradient></defs>
+        <path class="sp-area" d="${area}" fill="url(#g-${elId})"/>
+        <path class="sp-fill" d="M${line}" stroke="${color}" fill="none" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>`;
+}
+
+// ═══ SECTION SWITCHING ═══
 function switchSection(sectionId) {
     document.querySelectorAll('.client-section').forEach(s => s.classList.remove('active'));
     document.querySelectorAll('.client-nav-item').forEach(b => b.classList.remove('active'));
@@ -19,7 +96,7 @@ document.querySelectorAll('.client-nav-item[data-section]').forEach(btn =>
     btn.addEventListener('click', () => switchSection(btn.dataset.section))
 );
 
-// ── Platform nav visibility ───────────────────────────────────────────────────
+// ═══ PLATFORM NAV VISIBILITY ═══
 function applyPlatformNav(platforms) {
     const hasS1 = platforms.includes('SentinelOne');
     const hasAV = platforms.includes('AlienVault');
@@ -30,13 +107,12 @@ function applyPlatformNav(platforms) {
     if (navAlerts) navAlerts.style.display = hasAV ? '' : 'none';
     if (navEdr)    navEdr.style.display    = hasS1 ? '' : 'none';
 
-    // If current section is EDR but client has no S1, switch to overview
     const activeSection = document.querySelector('.client-section.active');
     if (activeSection?.id === 'section-edr' && !hasS1) switchSection('section-overview');
     if (activeSection?.id === 'section-alerts' && !hasAV) switchSection('section-overview');
 }
 
-// ── REST pre-load ─────────────────────────────────────────────────────────────
+// ═══ REST PRE-LOAD ═══
 async function preload() {
     try {
         const r = await fetch(`/api/client/${encodeURIComponent(CLIENT_NAME)}/data`);
@@ -44,12 +120,13 @@ async function preload() {
     } catch (e) { console.warn('[REST]', e); }
 }
 
-// ── WebSocket ─────────────────────────────────────────────────────────────────
+// ═══ WEBSOCKET ═══
 function connectWS() {
     ws = new WebSocket(WS_URL);
     ws.onopen = () => {
         reconnectAttempts = 0;
         const o = $('reconnect-overlay'); if (o) o.classList.remove('visible');
+        showNotification('Connected', 'Real-time updates active', 'success');
     };
     ws.onmessage = e => {
         try {
@@ -66,12 +143,13 @@ function connectWS() {
         if (reconnectAttempts > 2) {
             const o = $('reconnect-overlay'); if (o) o.classList.add('visible');
         }
+        if (reconnectAttempts === 1) showNotification('Disconnected', 'Attempting to reconnect...', 'warning');
         setTimeout(connectWS, Math.min(reconnectAttempts * 2000, 15000));
     };
     ws.onerror = () => ws.close();
 }
 
-// ── Main render ───────────────────────────────────────────────────────────────
+// ═══ MAIN RENDER ═══
 function renderClient(c) {
     if (!c) return;
 
@@ -113,7 +191,15 @@ function renderClient(c) {
     animNum('kv-blocked',   c.blocked_attempts|| 0);
     animNum('kv-dfir',      c.dfir_cases      || 0);
 
-    // Hide KPI tiles not applicable to this client's platforms
+    // Sparklines
+    const timeline = c.event_timeline || [];
+    renderSparkline('spark-alarms',    timeline, '#F97316');
+    renderSparkline('spark-threats',   timeline, '#818CF8');
+    renderSparkline('spark-endpoints', timeline, '#F43F5E');
+    renderSparkline('spark-blocked',   timeline, '#22D3EE');
+    renderSparkline('spark-dfir',      timeline, '#A78BFA');
+
+    // Hide KPI tiles not applicable
     const kvAlarms    = $('kv-alarms')?.closest('.kpi-tile');
     const kvThreats   = $('kv-threats')?.closest('.kpi-tile');
     const kvEndpoints = $('kv-endpoints')?.closest('.kpi-tile');
@@ -121,8 +207,12 @@ function renderClient(c) {
     if (kvThreats)   kvThreats.style.display   = platforms.includes('SentinelOne') ? '' : 'none';
     if (kvEndpoints) kvEndpoints.style.display = platforms.includes('SentinelOne') ? '' : 'none';
 
+    // Remove skeletons from dash-prio and dash-methods
+    const dp = $('dash-prio'); if (dp) dp.innerHTML = '';
+    const dm = $('dash-methods'); if (dm) dm.innerHTML = '';
+
     // Charts
-    if (typeof updateEventChart === 'function') updateEventChart(c.event_timeline || []);
+    if (typeof updateEventChart === 'function') updateEventChart(timeline);
 
     // Overview panels
     renderDashPrio(c.av_priority_breakdown || []);
@@ -152,7 +242,7 @@ function renderClient(c) {
     renderS1Table(s1Alerts);
 }
 
-// ── Overview panels ───────────────────────────────────────────────────────────
+// ═══ OVERVIEW PANELS ═══
 function renderDashPrio(rows) {
     const el = $('dash-prio'); if (!el) return;
     if (!rows.length) { el.innerHTML = '<p style="color:#3A4A6A;font-size:.8rem;padding:6px 0;">No AV alarm data for this period.</p>'; return; }
@@ -181,7 +271,7 @@ function renderDashMethods(rows) {
         </div>`).join('');
 }
 
-// ── Alerts section renderers ──────────────────────────────────────────────────
+// ═══ ALERTS SECTION RENDERERS ═══
 function renderPrioTable(rows) {
     const el = $('prio-tbody'); if (!el) return;
     if (!rows.length) { el.innerHTML = '<tr><td colspan="5" class="empty-msg">No alarm data for this period.</td></tr>'; return; }
@@ -246,7 +336,7 @@ function renderAlarmLog(all) {
     }).join('');
 }
 
-// ── EDR (S1) ──────────────────────────────────────────────────────────────────
+// ═══ EDR (S1) ═══
 function renderS1Table(alerts) {
     const el = $('s1-tbody'); if (!el) return;
     if (!alerts.length) { el.innerHTML = '<tr><td colspan="6" class="empty-msg">No SentinelOne threats in the 24hr window.</td></tr>'; return; }
@@ -266,7 +356,7 @@ function renderS1Table(alerts) {
     }).join('');
 }
 
-// ── System status ─────────────────────────────────────────────────────────────
+// ═══ SYSTEM STATUS ═══
 function updateSysStatus(st) {
     const el = $('system-status'); if (!el) return;
     el.className = 'system-status' + (st === 'degraded' ? ' degraded' : st === 'error' || st === 'unconfigured' ? ' error' : '');
@@ -274,7 +364,7 @@ function updateSysStatus(st) {
     if (txt) txt.textContent = st === 'degraded' ? 'Partial Connectivity' : st === 'error' || st === 'unconfigured' ? 'Configuration Required' : 'All Systems Operational';
 }
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
+// ═══ HELPERS ═══
 const _anims = {};
 function animNum(id, target) {
     const el = $(id); if (!el) return;
@@ -314,7 +404,7 @@ function tick() {
     }, 1000);
 }
 
-// ── Boot ──────────────────────────────────────────────────────────────────────
+// ═══ BOOT ═══
 document.addEventListener('DOMContentLoaded', async () => {
     if (typeof initEventChart === 'function') initEventChart();
     await preload();
