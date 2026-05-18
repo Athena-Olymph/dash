@@ -67,7 +67,6 @@
   <div class="brand">Sentrium</div>
   <nav class="sidebar-nav">
     <a href="/analyst" class="nav-item active">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
       <span>Client Lookup</span>
     </a>
   </nav>
@@ -100,30 +99,24 @@
 
   {% if clients %}
   <div class="portal-card">
-    <div class="portal-icon">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
-    </div>
-    <div class="portal-title">Client Environments</div>
-    <div class="portal-sub">Choose a client to view their SOC dashboard</div>
+    <div class="portal-title">Select Client Environment</div>
+    <div class="portal-sub">Choose a client to open their SOC dashboard</div>
     <select class="portal-select" id="client-select">
       <option value="" disabled selected>Select a client…</option>
       {% for c in clients %}
       <option value="{{ c }}">{{ c }}</option>
       {% endfor %}
     </select>
-    <button class="portal-btn" id="view-btn" disabled onclick="viewClient()">View Dashboard</button>
+    <button class="portal-btn" id="view-btn" disabled onclick="viewClient()">Open Dashboard</button>
     <div class="portal-foot">
       <a href="/logout">Sign out</a>
     </div>
   </div>
   {% else %}
   <div class="portal-card">
-    <div class="portal-icon">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-    </div>
-    <div class="portal-title">No Clients Available</div>
-    <div class="portal-sub no-data">Client data has not been discovered yet. Please wait for the data fetcher to complete its first cycle.</div>
-    <div class="portal-foot"><a href="/logout">Sign out</a></div>
+    <div class="portal-title">No Environments Available</div>
+    <div class="portal-sub">Client data loads after the first fetch cycle (~30 seconds).</div>
+    <div class="portal-foot" style="margin-top:20px;"><a href="/logout">Sign out</a></div>
   </div>
   {% endif %}
 </main>
