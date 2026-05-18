@@ -1,128 +1,233 @@
-"""
-Sentrium Integrated SOC Dashboard — Authentication
-Multi-role auth: Admin (TOTP), Client (password), Analyst (password).
-"""
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sentrium SOC — Authentication</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            min-height: 100vh; display: flex; align-items: center; justify-content: center;
+            background: #0B0F1A;
+            background-image: radial-gradient(at 20% 30%, rgba(90, 109, 255, 0.15) 0, transparent 50%),
+                              radial-gradient(at 80% 70%, rgba(34, 211, 238, 0.1) 0, transparent 50%);
+            color: #E2E8F0; overflow: hidden;
+        }
+        .login-container { width: 100%; max-width: 400px; padding: 0 20px; }
+        .login-card {
+            background: rgba(15,23,42,0.75); backdrop-filter: blur(40px);
+            border: 1px solid rgba(255,255,255,0.08); border-radius: 20px;
+            padding: 36px 32px; box-shadow: 0 40px 80px rgba(0,0,0,0.5);
+            animation: fadeUp 0.45s ease forwards;
+        }
+        @keyframes fadeUp { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: translateY(0); } }
+        .brand { text-align: center; margin-bottom: 28px; }
+        .brand h1 { font-size: 1.15rem; font-weight: 700; letter-spacing: 0.5px; color: #E2E8F0; text-transform: uppercase; }
+        .brand p { font-size: 0.75rem; color: #64748B; font-weight: 500; margin-top: 4px; }
 
-from __future__ import annotations
-import secrets
-import time
-import logging
-from typing import Optional
-import pyotp
-from config import settings
+        .step-indicator { display: flex; align-items: center; justify-content: center; gap: 8px; margin-bottom: 24px; }
+        .step-dot { width: 8px; height: 8px; border-radius: 50%; background: rgba(255,255,255,0.1); transition: all 0.3s; }
+        .step-dot.active { background: #5A6DFF; box-shadow: 0 0 8px rgba(90,109,255,0.5); }
+        .step-line { width: 32px; height: 1px; background: rgba(255,255,255,0.08); }
+        .step-dot.done { background: #34D399; }
 
-logger = logging.getLogger("soc_dashboard.auth")
+        .form-step { display: none; }
+        .form-step.active { display: block; }
 
-# Session store: { token: { "created_at": float, "last_active": float, "role": str, "client_name": str|None } }
-_sessions: dict[str, dict] = {}
+        .form-group { margin-bottom: 20px; }
+        .form-group label { display: block; font-size: 0.73rem; font-weight: 600; color: #94A3B8; margin-bottom: 7px; text-transform: uppercase; letter-spacing: 0.5px; }
 
-# ── Password verification ──────────────────────────────────────
+        input[type="text"], input[type="password"] {
+            width: 100%; padding: 11px 14px; font-size: 0.9rem; font-weight: 500;
+            font-family: 'Inter', sans-serif; color: #F1F5F9;
+            background: rgba(30,41,59,0.8); border: 2px solid rgba(100,116,139,0.25);
+            border-radius: 10px; outline: none; transition: all 0.2s;
+        }
+        input[type="text"]:focus, input[type="password"]:focus { border-color: #5A6DFF; box-shadow: 0 0 0 3px rgba(90,109,255,0.15); background: rgba(30,41,59,1); }
 
-def verify_admin_password(username: str, password: str) -> bool:
-    """Verify admin credentials."""
-    return username == settings.ADMIN_USERNAME and password == settings.ADMIN_PASSWORD
+        .otp-row { display: flex; gap: 8px; justify-content: center; }
+        .otp-d { width: 48px; height: 54px; text-align: center; font-size: 1.35rem; font-weight: 700; font-family: 'Inter', monospace; color: #F1F5F9; background: rgba(30,41,59,0.8); border: 2px solid rgba(100,116,139,0.25); border-radius: 10px; outline: none; transition: all 0.2s; caret-color: #5A6DFF; }
+        .otp-d:focus { border-color: #5A6DFF; box-shadow: 0 0 0 3px rgba(90,109,255,0.15); }
 
-def verify_client_password(username: str, password: str) -> bool:
-    """Verify a client user's credentials."""
-    creds = settings.CLIENT_CREDENTIALS
-    stored = creds.get(username)
-    if stored and stored == password:
-        return True
-    return False
+        .error-msg { background: rgba(244,63,94,0.1); border: 1px solid rgba(244,63,94,0.25); color: #FDA4AF; padding: 10px 14px; border-radius: 10px; font-size: 0.8rem; font-weight: 600; text-align: center; margin-bottom: 16px; animation: shake 0.4s ease; }
+        @keyframes shake { 0%,100% { transform: translateX(0); } 25% { transform: translateX(-6px); } 75% { transform: translateX(6px); } }
 
-def verify_analyst_password(username: str, password: str) -> bool:
-    """Verify an analyst user's credentials."""
-    creds = settings.ANALYST_CREDENTIALS
-    stored = creds.get(username)
-    if stored and stored == password:
-        return True
-    return False
+        .btn {
+            width: 100%; padding: 13px; border: none; border-radius: 10px;
+            font-size: 0.88rem; font-weight: 700; font-family: inherit;
+            cursor: pointer; transition: all 0.25s; letter-spacing: 0.3px;
+            background: linear-gradient(135deg, #5A6DFF, #7C8AFF);
+            color: #fff; box-shadow: 0 6px 20px rgba(90,109,255,0.3);
+        }
+        .btn:hover { transform: translateY(-1px); box-shadow: 0 10px 28px rgba(90,109,255,0.4); }
+        .btn:active { transform: translateY(0); }
+        .btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none !important; }
 
-def resolve_client_name(username: str) -> str | None:
-    """Return the real client display name for this username.
+        .btn-outline {
+            width: 100%; padding: 11px; margin-top: 10px; border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 10px; font-size: 0.8rem; font-weight: 600; font-family: inherit;
+            cursor: pointer; transition: all 0.2s; background: transparent; color: #64748B;
+        }
+        .btn-outline:hover { background: rgba(255,255,255,0.04); color: #94A3B8; }
 
-    Resolution order:
-    1. CLIENT_NAME_MAP env var  → maps login username to exact S1/AV display name
-    2. Fall back to the username itself (works when username == client name)
-    """
-    if username not in settings.CLIENT_CREDENTIALS:
-        return None
-    name_map = settings.CLIENT_NAME_MAP
-    return name_map.get(username, username)
+        .footer { text-align: center; margin-top: 24px; font-size: 0.72rem; color: #475569; font-weight: 500; }
+        .footer span { color: #5A6DFF; font-weight: 700; }
 
-# ── TOTP ───────────────────────────────────────────────────────
+        .config-warning { background: rgba(251,191,36,0.08); border: 1px solid rgba(251,191,36,0.2); color: #FCD34D; padding: 12px 14px; border-radius: 10px; font-size: 0.78rem; font-weight: 600; text-align: center; margin-bottom: 16px; line-height: 1.5; }
 
-def verify_totp(code: str) -> bool:
-    """Verify a 6-digit TOTP code against the configured secret."""
-    if not settings.totp_configured():
-        logger.warning("TOTP not configured — authentication bypassed")
-        return True
-    try:
-        totp = pyotp.TOTP(settings.TOTP_SECRET)
-        return totp.verify(code, valid_window=1)
-    except Exception as e:
-        logger.error(f"TOTP verification error: {e}")
-        return False
+        .totp-info { text-align: center; font-size: 0.78rem; color: #64748B; margin-bottom: 18px; line-height: 1.5; }
+        .totp-info strong { color: #94A3B8; }
 
-# ── Session management ────────────────────────────────────────
+        @media(max-width:480px) {
+            .login-card { padding: 28px 20px; }
+            .otp-d { width: 40px; height: 48px; font-size: 1.15rem; }
+            .otp-row { gap: 6px; }
+        }
+    </style>
+</head>
+<body>
+    <div class="login-container">
+        <div class="login-card">
+            <div class="brand">
+                <h1>Sentrium</h1>
+                <p>Security Operations Center</p>
+            </div>
 
-def create_session(role: str = "admin", client_name: str | None = None) -> str:
-    """Create a new session with role metadata."""
-    token = secrets.token_urlsafe(48)
-    _sessions[token] = {
-        "created_at": time.time(),
-        "last_active": time.time(),
-        "role": role,
-        "client_name": client_name,
-    }
-    _cleanup_expired()
-    logger.info(f"Session created: role={role}, client={client_name}. Total: {len(_sessions)}")
-    return token
+            {% if error %}
+            <div class="error-msg">{{ error }}</div>
+            {% endif %}
 
-def validate_session(token: Optional[str]) -> bool:
-    """Check if a session token is valid and not expired."""
-    if not token:
-        return False
-    session = _sessions.get(token)
-    if not session:
-        return False
-    timeout_secs = settings.SESSION_TIMEOUT_MINUTES * 60
-    if timeout_secs > 0:
-        elapsed = time.time() - session["last_active"]
-        if elapsed > timeout_secs:
-            _sessions.pop(token, None)
-            logger.info("Session expired due to inactivity")
-            return False
-    session["last_active"] = time.time()
-    return True
+            <!-- Step indicator -->
+            <div class="step-indicator">
+                <span class="step-dot {{ 'active' if step == 'credentials' else 'done' if step == 'totp' else '' }}" data-step="1"></span>
+                <span class="step-line"></span>
+                <span class="step-dot {{ 'active' if step == 'totp' else '' }}" data-step="2"></span>
+            </div>
 
-def destroy_session(token: Optional[str]):
-    """Destroy a session."""
-    if token:
-        _sessions.pop(token, None)
-        logger.info(f"Session destroyed. Active sessions: {len(_sessions)}")
+            <form method="POST" action="/login" id="login-form" onsubmit="return validateLogin()">
+                <input type="hidden" name="step" value="{{ step }}">
 
-def get_session_role(token: Optional[str]) -> str | None:
-    """Get the role associated with a session."""
-    if not token:
-        return None
-    session = _sessions.get(token)
-    return session.get("role") if session else None
+                <!-- Step 1: Credentials -->
+                <div class="form-step {{ 'active' if step == 'credentials' else '' }}" id="step-credentials">
+                    <div class="form-group">
+                        <label>Username</label>
+                        <input type="text" name="username" id="username" placeholder="Your username"
+                               autocomplete="username"
+                               value="{{ username if username else '' }}" autofocus required>
+                    </div>
+                    <div class="form-group">
+                        <label>Password</label>
+                        <input type="password" name="password" id="password" placeholder="••••••••"
+                               autocomplete="current-password" required>
+                    </div>
+                    <p id="form-error" style="color:#F87171;font-size:.78rem;text-align:center;margin:-8px 0 12px;display:none;">
+                        Please enter both username and password.
+                    </p>
+                    <button type="submit" class="btn">Sign In</button>
+                </div>
 
-def get_session_client(token: Optional[str]) -> str | None:
-    """Get the client_name associated with a session."""
-    if not token:
-        return None
-    session = _sessions.get(token)
-    return session.get("client_name") if session else None
+                <!-- Step 2: TOTP (admin only) -->
+                <div class="form-step {{ 'active' if step == 'totp' else '' }}" id="step-totp">
+                    <div class="totp-info">
+                        Authenticator code required for <strong>{{ username }}</strong>
+                    </div>
+                    <input type="hidden" name="username" value="{{ username }}">
+                    <div class="form-group">
+                        <label>Verification Code</label>
+                        <div class="otp-row" id="otp-row">
+                            <input type="text" class="otp-d" maxlength="1" data-i="0" autocomplete="off" inputmode="numeric">
+                            <input type="text" class="otp-d" maxlength="1" data-i="1" autocomplete="off" inputmode="numeric">
+                            <input type="text" class="otp-d" maxlength="1" data-i="2" autocomplete="off" inputmode="numeric">
+                            <input type="text" class="otp-d" maxlength="1" data-i="3" autocomplete="off" inputmode="numeric">
+                            <input type="text" class="otp-d" maxlength="1" data-i="4" autocomplete="off" inputmode="numeric">
+                            <input type="text" class="otp-d" maxlength="1" data-i="5" autocomplete="off" inputmode="numeric">
+                        </div>
+                        <input type="hidden" name="totp_code" id="totp_code">
+                    </div>
+                    <button type="submit" class="btn" id="verify-btn">Verify</button>
+                    <button type="button" class="btn-outline" onclick="backToCredentials()">Back to sign in</button>
+                </div>
+            </form>
 
-# ── Internal ───────────────────────────────────────────────────
+            {% if not totp_configured %}
+            <div class="config-warning" style="margin-top:20px;">TOTP not configured. Add <strong>TOTP_SECRET</strong> to .env for 2FA.</div>
+            {% endif %}
 
-def _cleanup_expired():
-    """Remove expired sessions."""
-    if settings.SESSION_TIMEOUT_MINUTES <= 0:
-        return
-    cutoff = time.time() - (settings.SESSION_TIMEOUT_MINUTES * 60)
-    expired = [k for k, v in _sessions.items() if v["last_active"] < cutoff]
-    for k in expired:
-        del _sessions[k]
+            <div class="footer">Secured by <span>Sentrium Security</span></div>
+        </div>
+    </div>
+
+    <script>
+        function validateLogin() {
+            const credStep = document.getElementById('step-credentials');
+            if (credStep && credStep.classList.contains('active')) {
+                const u = document.getElementById('username').value.trim();
+                const p = document.getElementById('password').value;
+                const err = document.getElementById('form-error');
+                if (!u || !p) {
+                    if (err) err.style.display = 'block';
+                    if (!u) document.getElementById('username').style.borderColor = '#F87171';
+                    if (!p) document.getElementById('password').style.borderColor = '#F87171';
+                    return false; // block form submission
+                }
+            }
+            return true;
+        }
+
+        function submitCredentials() {
+            document.getElementById('login-form').submit();
+        }
+
+        // Reset error state on input
+        ['username','password'].forEach(id => {
+            const el = document.getElementById(id);
+            if (el) el.addEventListener('input', () => {
+                el.style.borderColor = '';
+                document.getElementById('form-error').style.display = 'none';
+            });
+        });
+
+        function backToCredentials() {
+            const form = document.getElementById('login-form');
+            document.getElementById('step-credentials').classList.add('active');
+            document.getElementById('step-totp').classList.remove('active');
+            document.querySelectorAll('.step-dot')[0].className = 'step-dot active';
+            document.querySelectorAll('.step-dot')[1].className = 'step-dot';
+            form.querySelector('[name="step"]').value = 'credentials';
+            document.getElementById('username').focus();
+        }
+
+        // OTP auto-advance
+        const otps = document.querySelectorAll('.otp-d');
+        const hi = document.getElementById('totp_code');
+        const form = document.getElementById('login-form');
+
+        function updateOtp() {
+            hi.value = Array.from(otps).map(d => d.value).join('');
+            if (hi.value.length === 6) { form.submit(); }
+        }
+
+        otps.forEach((d, i) => {
+            d.addEventListener('input', e => {
+                const v = e.target.value.replace(/\D/g, '').slice(-1);
+                e.target.value = v;
+                updateOtp();
+                if (v && i < 5) otps[i + 1].focus();
+            });
+            d.addEventListener('keydown', e => {
+                if (e.key === 'Backspace' && !d.value && i > 0) { otps[i - 1].focus(); otps[i - 1].value = ''; updateOtp(); }
+            });
+            d.addEventListener('paste', e => {
+                e.preventDefault();
+                const s = (e.clipboardData.getData('text') || '').replace(/\D/g, '').slice(0, 6);
+                s.split('').forEach((c, j) => { if (otps[j]) otps[j].value = c; });
+                updateOtp();
+                if (s.length === 6) form.submit();
+                else if (otps[s.length]) otps[s.length].focus();
+            });
+        });
+    </script>
+</body>
+</html>
