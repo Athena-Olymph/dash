@@ -160,11 +160,22 @@ function renderClient(c) {
     renderSensorTable(c.av_sensor_summary || []);
 
     const s1a = (c.recent_alerts || []).filter(a => a.platform === 'SentinelOne');
-    const s1l = $('s1-threat-lbl'); if (s1l) s1l.textContent = fmt(s1a.length) + ' threats · 24hr';
+    const s1Threats = c.total_threats || 0;
+    const s1l = $('s1-threat-lbl'); if (s1l) s1l.textContent = fmt(s1Threats) + ' threats · 24hr';
     const eb = $('nav-edr-badge');
-    if (eb && s1a.length) { eb.textContent = fmt(s1a.length); eb.style.display = 'inline'; }
+    if (eb && s1Threats) { eb.textContent = fmt(s1Threats); eb.style.display = 'inline'; }
+
+    // EDR KPI Strip
+    animNum('ekv-endpoints', c.total_endpoints || 0);
+    animNum('ekv-threats',   c.total_threats   || 0);
+    animNum('ekv-vuln-eps',  c.s1_vulnerable_endpoints || 0);
+    animNum('ekv-vuln-apps', c.s1_vulnerable_apps      || 0);
+    animNum('ekv-alerts',    c.s1_total_alerts || c.total_alerts || 0);
+    animNum('ekv-hashes',    c.s1_blocklisted_hashes || 0);
+
     renderS1Table(s1a);
 }
+
 
 // ═══ OVERVIEW ═══
 function renderDashPrio(rows) {
