@@ -1033,3 +1033,103 @@ html { scroll-behavior: smooth; }
     color: rgba(255,255,255,0.88);
     text-transform: uppercase;
 }
+
+/* ════════════════════════════════════════════════════
+   EDR KPI Strip — SentinelOne 24hr Overview
+   ════════════════════════════════════════════════════ */
+
+.edr-kpi-strip {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 12px;
+    margin-bottom: 4px;
+}
+
+@media (max-width: 1100px) { .edr-kpi-strip { grid-template-columns: repeat(3, 1fr); } }
+@media (max-width: 680px)  { .edr-kpi-strip { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 420px)  { .edr-kpi-strip { grid-template-columns: 1fr; } }
+
+.edr-kpi-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    padding: 16px 18px;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    box-shadow: var(--shadow-sm);
+    position: relative;
+    overflow: hidden;
+    transition: box-shadow 0.18s, transform 0.18s;
+}
+.edr-kpi-card:hover {
+    box-shadow: var(--shadow-md);
+    transform: translateY(-1px);
+}
+.edr-kpi-card::before {
+    content: '';
+    position: absolute;
+    left: 0; top: 0; bottom: 0;
+    width: 3px;
+    border-radius: 0;
+}
+
+/* Colour variants */
+.edr-kpi-blue   { }
+.edr-kpi-blue::before   { background: #3B82F6; }
+.edr-kpi-red    { }
+.edr-kpi-red::before    { background: #FF003C; }
+.edr-kpi-orange { }
+.edr-kpi-orange::before { background: #F97316; }
+.edr-kpi-purple { }
+.edr-kpi-purple::before { background: #8B5CF6; }
+.edr-kpi-teal   { }
+.edr-kpi-teal::before   { background: #06B6D4; }
+.edr-kpi-grey   { }
+.edr-kpi-grey::before   { background: #6B7280; }
+
+.edr-kpi-icon {
+    width: 38px;
+    height: 38px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+.edr-kpi-icon svg { width: 18px; height: 18px; }
+
+.edr-kpi-blue   .edr-kpi-icon { background: rgba(59,130,246,0.12);  color: #3B82F6; }
+.edr-kpi-red    .edr-kpi-icon { background: rgba(255,0,60,0.10);    color: #FF003C; }
+.edr-kpi-orange .edr-kpi-icon { background: rgba(249,115,22,0.12);  color: #F97316; }
+.edr-kpi-purple .edr-kpi-icon { background: rgba(139,92,246,0.12);  color: #8B5CF6; }
+.edr-kpi-teal   .edr-kpi-icon { background: rgba(6,182,212,0.12);   color: #06B6D4; }
+.edr-kpi-grey   .edr-kpi-icon { background: rgba(107,114,128,0.12); color: #6B7280; }
+
+.edr-kpi-body { flex: 1; min-width: 0; }
+
+.edr-kpi-val {
+    font-size: 1.55rem;
+    font-weight: 800;
+    letter-spacing: -0.03em;
+    color: var(--text-primary);
+    line-height: 1.1;
+    margin-bottom: 3px;
+}
+
+.edr-kpi-lbl {
+    font-size: 0.7rem;
+    font-weight: 600;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    line-height: 1.3;
+}
+
+/* Dark mode icon tints */
+[data-theme="dark"] .edr-kpi-blue   .edr-kpi-icon { background: rgba(59,130,246,0.18); }
+[data-theme="dark"] .edr-kpi-red    .edr-kpi-icon { background: rgba(255,0,60,0.15);  }
+[data-theme="dark"] .edr-kpi-orange .edr-kpi-icon { background: rgba(249,115,22,0.18); }
+[data-theme="dark"] .edr-kpi-purple .edr-kpi-icon { background: rgba(139,92,246,0.18); }
+[data-theme="dark"] .edr-kpi-teal   .edr-kpi-icon { background: rgba(6,182,212,0.18);  }
+[data-theme="dark"] .edr-kpi-grey   .edr-kpi-icon { background: rgba(107,114,128,0.20); }
