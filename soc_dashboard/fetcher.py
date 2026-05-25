@@ -74,6 +74,8 @@ class S1Fetcher:
         all_items = []
         cursor = None
 
+        _retry_budget = 3   # max 429 retries per page
+
         while True:
             if cursor:
                 params["cursor"] = cursor
@@ -83,10 +85,24 @@ class S1Fetcher:
                 if resp.status_code == 401:
                     logger.error(f"S1 Auth failed on {endpoint} — token may be expired")
                     break
+
+                # ── Rate-limit handling ──────────────────────────────────────
+                if resp.status_code == 429:
+                    if _retry_budget <= 0:
+                        logger.warning(f"S1 {endpoint} 429 — retry budget exhausted, skipping")
+                        break
+                    wait = int(resp.headers.get("Retry-After", "2"))
+                    wait = min(wait, 10)   # cap at 10 s
+                    logger.debug(f"S1 {endpoint} 429 — sleeping {wait}s (budget={_retry_budget})")
+                    await asyncio.sleep(wait)
+                    _retry_budget -= 1
+                    continue   # retry same page
+
                 if resp.status_code != 200:
                     logger.warning(f"S1 {endpoint} returned {resp.status_code}")
                     break
 
+                _retry_budget = 3  # reset on successful page
                 body = resp.json()
                 data = body.get("data", body)
                 if isinstance(data, dict) and "sites" in data:
@@ -103,7 +119,7 @@ class S1Fetcher:
                 if not cursor:
                     break
 
-                await asyncio.sleep(0.02)
+                await asyncio.sleep(0.05)
 
             except httpx.RequestError as e:
                 logger.warning(f"S1 network error on {endpoint}: {e} — retrying with fresh client")
@@ -158,6 +174,55 @@ class S1Fetcher:
             "sortBy": "createdAt",
             "sortOrder": "desc",
         })
+
+    async def fetch_risks(self, site_id: str, days_back: int = 1) -> list[dict]:
+        """
+        Fetch application vulnerability risks via /application-management/risks.
+        Returns raw list of risk records — used to compute both vuln endpoints
+        (unique endpoint names) and vuln app count (total records).
+        Falls back to empty list if unavailable.
+        """
+        now = datetime.now(timezone.utc)
+        start = (now - timedelta(days=days_back)).strftime("%Y-%m-%dT%H:%M:%SZ")
+        end   = now.strftime("%Y-%m-%dT%H:%M:%SZ")
+        try:
+            return await self._paginate(
+                "application-management/risks",
+                {
+                    "siteIds":            site_id,
+                    "detectionDate__gte": start,
+                    "detectionDate__lte": end,
+                    "sortBy":             "detectionDate",
+                    "sortOrder":          "desc",
+                },
+                max_items=5000,
+            )
+        except Exception as e:
+            logger.debug(f"S1 application risks unavailable for site {site_id}: {e}")
+            return []
+
+    async def fetch_blocklisted_hashes(self, site_id: str) -> int:
+        """
+        Count blocklisted hash restrictions via /restrictions?type=black_hash.
+        Includes parent (account/group) scope hashes via includeParents.
+        Falls back to 0 if the endpoint is unavailable.
+        """
+        try:
+            items = await self._paginate(
+                "restrictions",
+                {
+                    "siteIds":         site_id,
+                    "type":            "black_hash",
+                    "includeParents":  "true",
+                    "includeChildren": "true",
+                },
+                max_items=5000,
+            )
+            return len(items)
+        except Exception as e:
+            logger.debug(f"S1 blocklisted hashes unavailable for site {site_id}: {e}")
+            return 0
+
 
     async def fetch_alerts(self, site_id: str, days_back: int = 7) -> list[dict]:
         """Fetch cloud detection alerts for a site."""
@@ -732,9 +797,11 @@ class DashboardAggregator:
 
     async def _build_s1_client(self, site_id: str, site_name: str) -> ClientSummary:
         """Build client summary from SentinelOne data — 24h threat window."""
-        agents, threats_24h = await asyncio.gather(
+        agents, threats_24h, risks, blocklisted_count = await asyncio.gather(
             self.s1.fetch_agents(site_id),
-            self.s1.fetch_threats(site_id, days_back=1),   # 24 hours only
+            self.s1.fetch_threats(site_id, days_back=1),      # 24 hours only
+            self.s1.fetch_risks(site_id, days_back=1),         # app-mgmt risks (24hr)
+            self.s1.fetch_blocklisted_hashes(site_id),         # blocklisted hash count
             return_exceptions=True,
         )
 
@@ -744,8 +811,28 @@ class DashboardAggregator:
         if isinstance(threats_24h, Exception):
             logger.warning(f"S1 threats error for {site_name}: {threats_24h}")
             threats_24h = []
+        if isinstance(risks, Exception):
+            logger.debug(f"S1 risks unavailable for {site_name}: {risks}")
+            risks = []
+        if isinstance(blocklisted_count, Exception):
+            logger.debug(f"S1 blocklisted hashes unavailable for {site_name}: {blocklisted_count}")
+            blocklisted_count = 0
 
-        logger.info(f"S1 [{site_name}]: {len(agents)} endpoints, {len(threats_24h)} threats (24h)")
+        # ── Derive vuln counts from application-management/risks ──
+        vuln_ep_set: set[str] = set()
+        for r in risks:
+            ep = (r.get("endpointName") or r.get("endpoint")
+                  or r.get("agentName")  or r.get("hostName") or "")
+            if ep:
+                vuln_ep_set.add(ep)
+        vuln_eps  = len(vuln_ep_set)   # unique endpoints with a risk record
+        vuln_apps = len(risks)          # total risk records  = total vuln app instances
+
+        logger.info(
+            f"S1 [{site_name}]: {len(agents)} endpoints, {len(threats_24h)} threats (24h), "
+            f"{vuln_eps} vuln endpoints, {vuln_apps} vuln app risks, {blocklisted_count} blocklisted hashes"
+        )
+
 
         # ── Threat classifications from 24h threats ──
         class_counter = Counter()
@@ -851,7 +938,11 @@ class DashboardAggregator:
             s1_site_id=site_id,
             total_endpoints=len(agents),
             total_threats=len(threats_24h),
-            total_alerts=len(threats_24h),   # 24h threat count as alerts
+            total_alerts=len(threats_24h),     # 24h threat count as alerts
+            s1_total_alerts=len(threats_24h),
+            s1_vulnerable_endpoints=vuln_eps,
+            s1_vulnerable_apps=vuln_apps,
+            s1_blocklisted_hashes=blocklisted_count,
             events_processed=len(agents) * 1000 + len(threats_24h) * 50,
             blocked_attempts=blocked,
             dfir_cases=dfir,
@@ -870,6 +961,7 @@ class DashboardAggregator:
                 ),
             ],
         )
+
 
     def _build_av_summary(self, alarms: list[dict], events: list[dict],
                           name: str, sensor_map: dict | None = None) -> ClientSummary:
